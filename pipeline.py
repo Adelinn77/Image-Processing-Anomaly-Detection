@@ -102,14 +102,15 @@ def main():
                 # Calculate the difference for the heatmap visualization
                 diff = np.abs(smooth_test_image.astype(np.float32) - mean_template).astype(np.uint8)
                 
-                # Compute the final mask using the new Z-score function
-                # You can adjust z_threshold=4.0 up or down depending on the noise
-                final_mask = algorithms.compute_anomaly(smooth_test_image, mean_template, std_template, z_threshold=4.0)
+                # Compute the final mask using the Z-score function
+                final_mask = algorithms.compute_anomaly(smooth_test_image, mean_template, std_template, z_threshold=3.5)
                 
                 # Create Heatmap based on the difference
-                norm_diff = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX)
-                heatmap = cv2.applyColorMap(norm_diff, cv2.COLORMAP_JET)
+                norm_diff = np.clip(diff.astype(np.float32) * 3.0, 0, 255).astype(np.uint8)
                 
+                heatmap_lut = algorithms.generate_heatmap_lut()
+                heatmap = algorithms.apply_heatmap(norm_diff, heatmap_lut)
+
                 # Display in 4 windows
                 window_names = ["Original Test Image", "Mean Template", "Heatmap", "Anomaly Mask"]
                 for name in window_names:

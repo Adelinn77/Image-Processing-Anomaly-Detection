@@ -69,8 +69,11 @@ def apply_gaussian_filter(src_image, kernel_size):
     # map the values of the product to the range [0, 255] and convert to uint8
     result = np.clip(product, 0, 255).astype(np.uint8)
     
+    # this is equivalent to padding the image
     rows = slice(d, -d, 1)
     cols = slice(d, -d, 1)
+
+    # the borders keep the source image's pixels unchanged
     dst_image[rows, cols] = result
     
     return dst_image.astype(np.uint8)
@@ -78,27 +81,56 @@ def apply_gaussian_filter(src_image, kernel_size):
 
 def generate_golden_template(images):
     images_stack = np.array(images, dtype=np.float32)
-    mean_image = np.mean(images_stack, axis=0).astype(np.float32)
-    std_image = np.std(images_stack, axis=0).astype(np.float32)
     
-    return mean_image, std_image
-def compute_anomaly(test_image, mean_template, std_template, z_threshold=4.0):
+    N = images_stack.shape[0]
+    
+    # the sum of all images
+    sum_image = np.sum(images_stack, axis=0)
+
+    # arithmetic mean
+    mean_image = sum_image / N
+    
+    # diff_stack is a 3D array that holds each image(from the original stack) - the mean image
+    diff_stack = images_stack - mean_image
+    
+    # square each image and penalize the pixels that are far from the mean
+    squared_diff_stack = diff_stack ** 2
+    
+    # the sum of all squared difference images
+    sum_squared_diffs = np.sum(squared_diff_stack, axis=0)
+
+    # arithmetic mean of the squared difference images a.k.a. variance
+    variance_image = sum_squared_diffs / N
+    
+    # standard deviation is obtained by taking the square root of the variance
+    std_image = np.sqrt(variance_image)
+    # this is really helpfull because it shows how much each pixel in the image varies across the training set
+    
+    return mean_image.astype(np.float32), std_image.astype(np.float32)
+
+
+def compute_anomaly(test_image, mean_template, std_template, z_threshold=3.5):
     
     epsilon = 2.0
-    safe_std = std_template + epsilon
+    safe_std = std_template + epsilon  # this way division by 0 is avoided
     
     diff = np.abs(test_image.astype(np.float32) - mean_template)
     
-    z_scores = diff / safe_std
-    
+    # if a pixel has a high standard deviation, then a large difference compared to the standard deviation will be small 
+    # so therefore it won't be considered as anomaly
+
+    # but if a pixel varies slightly across the train images, then the same difference compared to the standard deviation will be large 
+    # and the pixel will be considered as anomaly
+    z_score = diff / safe_std
 
     anomaly_mask = np.zeros(test_image.shape, dtype=np.uint8)
-    anomaly_mask[z_scores > z_threshold] = 255
+    anomaly_mask[z_score > z_threshold] = 255
     
     opened_mask = opening(anomaly_mask)
     final_mask = closing_n_times(opened_mask, iterations=7)
  
     return final_mask
+
 def convert_to_binary(src_image, threshold):
     dst_image = np.zeros(src_image.shape, dtype=np.uint8)
     
@@ -129,44 +161,44 @@ def show_histogram(hist):
     plt.xlim([0, 256])
     plt.show()
 
-def find_best_threshold_otsu(src_image):
-    # Create a histogram of the image
-    hist = compute_histogram(src_image)
+# def find_best_threshold_otsu(src_image):
+#     # Create a histogram of the image
+#     hist = compute_histogram(src_image)
 
-    # Normalize the histogram
-    norm_hist = normalize_histogram(hist, src_image.size)
+#     # Normalize the histogram
+#     norm_hist = normalize_histogram(hist, src_image.size)
 
-    # The mean intensity of all the pixels
-    global_mean = np.mean(src_image)
+#     # The mean intensity of all the pixels
+#     global_mean = np.mean(src_image)
 
-    # Array of intensity levels
-    intensity_levels = np.arange(0, 256)
+#     # Array of intensity levels
+#     intensity_levels = np.arange(0, 256)
 
-    # Track both the maximum variance found and the 'k' that produced it
-    max_variance = -1
-    best_threshold = 0 
+#     # Track both the maximum variance found and the 'k' that produced it
+#     max_variance = -1
+#     best_threshold = 0 
     
-    # Iterate through all possible thresholds
-    for k in range(0, 256):
-        # Calculate P1(k) - inclusive of k
-        sum_k = np.sum(norm_hist[0:k+1])
+#     # Iterate through all possible thresholds
+#     for k in range(0, 256):
+#         # Calculate P1(k) - inclusive of k
+#         sum_k = np.sum(norm_hist[0:k+1])
         
-        # Prevent division by zero
-        if sum_k == 0 or sum_k == 1:
-            continue
+#         # Prevent division by zero
+#         if sum_k == 0 or sum_k == 1:
+#             continue
             
-        # Calculate m(k) - inclusive of k
-        mean_k = np.sum(norm_hist[0:k+1] * intensity_levels[0:k+1])
+#         # Calculate m(k) - inclusive of k
+#         mean_k = np.sum(norm_hist[0:k+1] * intensity_levels[0:k+1])
         
-        # Calculate between-class variance
-        variance_k = (global_mean * sum_k - mean_k) ** 2 / (sum_k * (1 - sum_k))  
+#         # Calculate between-class variance
+#         variance_k = (global_mean * sum_k - mean_k) ** 2 / (sum_k * (1 - sum_k))  
         
-        # If we found a new maximum variance, update both variables
-        if variance_k > max_variance:
-            max_variance = variance_k
-            best_threshold = k
+#         # If we found a new maximum variance, update both variables
+#         if variance_k > max_variance:
+#             max_variance = variance_k
+#             best_threshold = k
 
-    return best_threshold
+#     return best_threshold
 
 # just for testing purposes, not used in the main app
 def apply_median_filter(src_image, kernel_size=5):
@@ -235,58 +267,32 @@ def opening_n_times(binary_image, iterations):
         
     return temp_image
 
-
-
-
-# def create_visualization_panel(test_image, mean_img, z_scores, anomaly_mask):
-#     """
-#     Constructs a gorgeous, premium, side-by-side 4-panel image visualization:
-#     Original | Mean Model | Heatmap | Contours Overlay.
-#     """
-#     h, w, c = test_image.shape
-
-#     # 1. Original Panel
-#     panel_orig = test_image.copy()
-#     cv2.putText(panel_orig, "Original Test Image", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-
-#     # 2. Mean Model Panel
-#     mean_uint8 = np.clip(mean_img, 0, 255).astype(np.uint8)
-#     panel_mean = cv2.cvtColor(mean_uint8, cv2.COLOR_GRAY2BGR)
-#     cv2.putText(panel_mean, "Normal Mean Model", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-
-#     # 3. Heatmap Panel
-#     # Clip and map Z-score values in range [0, 8] to [0, 255]
-#     norm_z = np.clip(z_scores * (255.0 / 8.0), 0, 255).astype(np.uint8)
-#     panel_heat = cv2.applyColorMap(norm_z, cv2.COLORMAP_JET)
-#     cv2.putText(panel_heat, "Anomaly Heatmap", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-
-#     # 4. Detection contours + bounding box
-#     panel_detect = test_image.copy()
-#     contours, _ = cv2.findContours(anomaly_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+def generate_heatmap_lut():
+    # Create an empty array for 256 colors, each with 3 channels (B, G, R)
+    lut = np.zeros((256, 3), dtype=np.uint8)
     
-#     anomaly_found = False
-#     for contour in contours:
-#         area = cv2.contourArea(contour)
-#         if area > 20:  # Filter out tiny noise remnants
-#             anomaly_found = True
-#             # Draw red contour
-#             cv2.drawContours(panel_detect, [contour], -1, (0, 0, 255), 2)
-#             # Draw yellow bounding box
-#             x, y, wb, hb = cv2.boundingRect(contour)
-#             cv2.rectangle(panel_detect, (x, y), (x + wb, y + hb), (0, 255, 255), 2)
+    for i in range(256):
+        # Normalize the pixel intensity to a value between 0.0 and 1.0
+        v = i / 255.0
+        
+        # The mathematical formulas for the colormap curves
+        r = 1.5 - abs(4.0 * v - 3.0)
+        g = 1.5 - abs(4.0 * v - 2.0)
+        b = 1.5 - abs(4.0 * v - 1.0)
+        
+        # Clamp the values to keep them strictly between 0.0 and 1.0
+        # Then multiply by 255 to get the standard 8-bit color scale
+        r = int(np.clip(r, 0.0, 1.0) * 255)
+        g = int(np.clip(g, 0.0, 1.0) * 255)
+        b = int(np.clip(b, 0.0, 1.0) * 255)
+        
+        # Store the color in BGR format (because OpenCV uses BGR, not RGB)
+        lut[i] = [b, g, r]
+        
+    return lut
 
-#     status_str = "DEFECT DETECTED" if anomaly_found else "NORMAL PILL"
-#     status_color = (0, 0, 255) if anomaly_found else (0, 255, 0)
-#     cv2.putText(panel_detect, status_str, (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
-
-#     # Stack the 4 panels horizontally
-#     combined = np.hstack((panel_orig, panel_mean, panel_heat, panel_detect))
-
-#     # Resize to fit normal desktop width nicely if needed
-#     max_width = 1600
-#     if combined.shape[1] > max_width:
-#         scale = max_width / combined.shape[1]
-#         new_h = int(combined.shape[0] * scale)
-#         combined = cv2.resize(combined, (max_width, new_h), interpolation=cv2.INTER_AREA)
-
-#     return combined
+def apply_heatmap(gray_image, lut):
+    
+    heatmap = lut[gray_image]
+    
+    return heatmap
