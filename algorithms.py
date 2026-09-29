@@ -161,44 +161,44 @@ def show_histogram(hist):
     plt.xlim([0, 256])
     plt.show()
 
-# def find_best_threshold_otsu(src_image):
-#     # Create a histogram of the image
-#     hist = compute_histogram(src_image)
+def find_best_threshold_otsu(src_image):
+    # Create a histogram of the image
+    hist = compute_histogram(src_image)
 
-#     # Normalize the histogram
-#     norm_hist = normalize_histogram(hist, src_image.size)
+    # Normalize the histogram
+    norm_hist = normalize_histogram(hist, src_image.size)
 
-#     # The mean intensity of all the pixels
-#     global_mean = np.mean(src_image)
+    # The mean intensity of all the pixels
+    global_mean = np.mean(src_image)
 
-#     # Array of intensity levels
-#     intensity_levels = np.arange(0, 256)
+    # Array of intensity levels
+    intensity_levels = np.arange(0, 256)
 
-#     # Track both the maximum variance found and the 'k' that produced it
-#     max_variance = -1
-#     best_threshold = 0 
+    # Track both the maximum variance found and the 'k' that produced it
+    max_variance = -1
+    best_threshold = 0 
     
-#     # Iterate through all possible thresholds
-#     for k in range(0, 256):
-#         # Calculate P1(k) - inclusive of k
-#         sum_k = np.sum(norm_hist[0:k+1])
+    # Iterate through all possible thresholds
+    for k in range(0, 256):
+        # Calculate P1(k) - inclusive of k
+        sum_k = np.sum(norm_hist[0:k+1])
         
-#         # Prevent division by zero
-#         if sum_k == 0 or sum_k == 1:
-#             continue
+        # Prevent division by zero
+        if sum_k == 0 or sum_k == 1:
+            continue
             
-#         # Calculate m(k) - inclusive of k
-#         mean_k = np.sum(norm_hist[0:k+1] * intensity_levels[0:k+1])
+        # Calculate m(k) - inclusive of k
+        mean_k = np.sum(norm_hist[0:k+1] * intensity_levels[0:k+1])
         
-#         # Calculate between-class variance
-#         variance_k = (global_mean * sum_k - mean_k) ** 2 / (sum_k * (1 - sum_k))  
+        # Calculate between-class variance
+        variance_k = (global_mean * sum_k - mean_k) ** 2 / (sum_k * (1 - sum_k))  
         
-#         # If we found a new maximum variance, update both variables
-#         if variance_k > max_variance:
-#             max_variance = variance_k
-#             best_threshold = k
+        # If we found a new maximum variance, update both variables
+        if variance_k > max_variance:
+            max_variance = variance_k
+            best_threshold = k
 
-#     return best_threshold
+    return best_threshold
 
 # just for testing purposes, not used in the main app
 def apply_median_filter(src_image, kernel_size=5):
